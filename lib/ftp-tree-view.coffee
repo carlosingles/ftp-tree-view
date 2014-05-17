@@ -2,24 +2,36 @@ path = require 'path'
 shell = require 'shell'
 
 _ = require 'underscore-plus'
-{$, BufferedProcess, ScrollView} = require 'atom'
+{$, BufferedProcess, ScrollView, EditorView} = require 'atom'
 fs = require 'fs-plus'
 
+Dialog = null     # Defer requiring until actually needed
 AddDialog = null  # Defer requiring until actually needed
 MoveDialog = null # Defer requiring until actually needed
 CopyDialog = null # Defer requiring until actually needed
 
 Directory = require './directory'
 DirectoryView = require './directory-view'
+FTPDirectoryView = require './ftp-directory-view'
 File = require './file'
 FileView = require './file-view'
 LocalStorage = window.localStorage
 
+Client = require('ftp')
+
 module.exports =
-class TreeView extends ScrollView
+class FTPTreeView extends ScrollView
   @content: ->
-    @div class: 'tree-view-resizer tool-panel', 'data-show-on-right-side': atom.config.get('tree-view.showOnRightSide'), =>
+    @div class: 'tree-view-resizer tool-panel', 'data-show-on-right-side': atom.config.get('ftp-tree-view.showOnRightSide'), =>
       @div class: 'tree-view-scroller', outlet: 'scroller', =>
+        @div class: 'ftp-tree-view connection-panel', =>
+          @div class: 'block', =>
+            @subview 'hostEditor', new EditorView(mini: true)
+          @div class: 'block', =>
+            @subview 'usernameEditor', new EditorView(mini: true)
+          @div class: 'block', =>
+            @subview 'passwordEditor', new EditorView(mini: true)
+          @button click: 'connectToFTPServer', 'Connect'
         @ol class: 'tree-view full-menu list-tree has-collapsable-children focusable-panel', tabindex: -1, outlet: 'list'
       @div class: 'tree-view-resize-handle', outlet: 'resizeHandle'
 
@@ -31,6 +43,10 @@ class TreeView extends ScrollView
     scrollLeftAfterAttach = -1
     scrollTopAfterAttach = -1
     selectedPath = null
+
+    @hostEditor.setPlaceholderText('host')
+    @usernameEditor.setPlaceholderText('username')
+    @passwordEditor.setPlaceholderText('password')
 
     @on 'dblclick', '.tree-view-resize-handle', => @resizeToFitContent()
     @on 'click', '.entry', (e) =>
@@ -62,19 +78,19 @@ class TreeView extends ScrollView
     @on 'mousedown', '.tree-view-resize-handle', (e) => @resizeStarted(e)
     @command 'core:move-up', => @moveUp()
     @command 'core:move-down', => @moveDown()
-    @command 'tree-view:expand-directory', => @expandDirectory()
-    @command 'tree-view:collapse-directory', => @collapseDirectory()
-    @command 'tree-view:open-selected-entry', => @openSelectedEntry(true)
-    @command 'tree-view:move', => @moveSelectedEntry()
-    @command 'tree-view:copy', => @copySelectedEntries()
-    @command 'tree-view:cut', => @cutSelectedEntries()
-    @command 'tree-view:paste', => @pasteEntries()
-    @command 'tree-view:copy-full-path', => @copySelectedEntryPath(false)
-    @command 'tree-view:show-in-file-manager', => @showSelectedEntryInFileManager()
-    @command 'tree-view:copy-project-path', => @copySelectedEntryPath(true)
+    @command 'ftp-tree-view:expand-directory', => @expandDirectory()
+    @command 'ftp-tree-view:collapse-directory', => @collapseDirectory()
+    @command 'ftp-tree-view:open-selected-entry', => @openSelectedEntry(true)
+    @command 'ftp-tree-view:move', => @moveSelectedEntry()
+    @command 'ftp-tree-view:copy', => @copySelectedEntries()
+    @command 'ftp-tree-view:cut', => @cutSelectedEntries()
+    @command 'ftp-tree-view:paste', => @pasteEntries()
+    @command 'ftp-tree-view:copy-full-path', => @copySelectedEntryPath(false)
+    @command 'ftp-tree-view:show-in-file-manager', => @showSelectedEntryInFileManager()
+    @command 'ftp-tree-view:copy-project-path', => @copySelectedEntryPath(true)
     @command 'tool-panel:unfocus', => @unfocus()
 
-    @on 'tree-view:directory-modified', =>
+    @on 'ftp-tree-view:directory-modified', =>
       if @hasFocus()
         @selectEntryForPath(@selectedPath) if @selectedPath
       else
@@ -83,13 +99,13 @@ class TreeView extends ScrollView
     @subscribe atom.workspaceView, 'pane-container:active-pane-item-changed', =>
       @selectActiveFile()
     @subscribe atom.project, 'path-changed', => @updateRoot()
-    @subscribe atom.config.observe 'tree-view.hideVcsIgnoredFiles', callNow: false, =>
+    @subscribe atom.config.observe 'ftp-tree-view.hideVcsIgnoredFiles', callNow: false, =>
       @updateRoot()
-    @subscribe atom.config.observe 'tree-view.hideIgnoredNames', callNow: false, =>
+    @subscribe atom.config.observe 'ftp-tree-view.hideIgnoredNames', callNow: false, =>
       @updateRoot()
     @subscribe atom.config.observe 'core.ignoredNames', callNow: false, =>
-      @updateRoot() if atom.config.get('tree-view.hideIgnoredNames')
-    @subscribe atom.config.observe 'tree-view.showOnRightSide', callNow: false, (newValue) =>
+      @updateRoot() if atom.config.get('ftp-tree-view.hideIgnoredNames')
+    @subscribe atom.config.observe 'ftp-tree-view.showOnRightSide', callNow: false, (newValue) =>
       @onSideToggled(newValue)
 
     @updateRoot(state.directoryExpansionStates)
@@ -101,6 +117,22 @@ class TreeView extends ScrollView
     @scrollLeftAfterAttach = state.scrollLeft if state.scrollLeft
     @width(state.width) if state.width > 0
     @attach() if state.attached
+
+  connectToFTPServer: ->
+    client = new Client()
+    currentView = @
+    client.on 'ready', ->
+      console.log 'Connected'
+      client.list (err, list) ->
+        throw err if err
+        hostname = currentView.hostEditor.getText()
+        root = new FTPDirectoryView(hostname, list)
+        currentView.list.append(root)
+        client.end()
+    client.connect
+      host: @hostEditor.getText()
+      user: @usernameEditor.getText()
+      password: @passwordEditor.getText()
 
   afterAttach: (onDom) ->
     @focus() if @focusAfterAttach
@@ -131,7 +163,7 @@ class TreeView extends ScrollView
 
   attach: ->
     return unless atom.project.getPath()
-    if atom.config.get('tree-view.showOnRightSide')
+    if atom.config.get('ftp-tree-view.showOnRightSide')
       @removeClass('panel-left')
       @addClass('panel-right')
       atom.workspaceView.appendToRight(this)
@@ -145,8 +177,8 @@ class TreeView extends ScrollView
     @scrollTopAfterAttach = @scrollTop()
 
     # Clean up copy and cut localStorage Variables
-    LocalStorage['tree-view:cutPath'] = null
-    LocalStorage['tree-view:copyPath'] = null
+    LocalStorage['ftp-tree-view:cutPath'] = null
+    LocalStorage['ftp-tree-view:copyPath'] = null
 
     super
     atom.workspaceView.focus()
@@ -190,7 +222,7 @@ class TreeView extends ScrollView
     $(document.body).off('mouseup', @resizeStopped)
 
   resizeTreeView: ({pageX}) =>
-    if atom.config.get('tree-view.showOnRightSide')
+    if atom.config.get('ftp-tree-view.showOnRightSide')
       width = $(document.body).width() - pageX
     else
       width = pageX
@@ -204,9 +236,11 @@ class TreeView extends ScrollView
     @root?.remove()
 
     if rootDirectory = atom.project.getRootDirectory()
-      directory = new Directory({directory: rootDirectory, isExpanded: true, expandedEntries, isRoot: true})
-      @root = new DirectoryView(directory)
-      @list.append(@root)
+      ## always return blank directory
+      @root = null
+      # directory = new Directory({directory: rootDirectory, isExpanded: true, expandedEntries, isRoot: true})
+      # @root = new DirectoryView(directory)
+      # @list.append(@root)
     else
       @root = null
 
@@ -295,21 +329,15 @@ class TreeView extends ScrollView
       directory.collapse()
       @selectEntry(directory)
 
+  moveSelectedEntry: ->
+    super
+
   openSelectedEntry: (changeFocus) ->
     selectedEntry = @selectedEntry()
     if selectedEntry instanceof DirectoryView
       selectedEntry.view().toggleExpansion()
     else if selectedEntry instanceof FileView
       atom.workspaceView.open(selectedEntry.getPath(), { changeFocus })
-
-  moveSelectedEntry: ->
-    entry = @selectedEntry()
-    return unless entry and entry isnt @root
-    oldPath = entry.getPath()
-
-    MoveDialog ?= require './move-dialog'
-    dialog = new MoveDialog(oldPath)
-    dialog.attach()
 
   showSelectedEntryInFileManager: ->
     entry = @selectedEntry()
@@ -330,17 +358,7 @@ class TreeView extends ScrollView
     new BufferedProcess({command, args, stderr, exit})
 
   copySelectedEntry: ->
-    if @hasFocus()
-      entry = @selectedEntry()
-      return unless entry isnt root
-      oldPath = entry.getPath()
-    else
-      oldPath = @getActivePath()
-    return unless oldPath
-
-    CopyDialog ?= require './copy-dialog'
-    dialog = new CopyDialog(oldPath)
-    dialog.attach()
+    super
 
   removeSelectedEntries: ->
     if @hasFocus()
@@ -507,7 +525,7 @@ class TreeView extends ScrollView
     @scrollTop(0)
 
   toggleSide: ->
-    atom.config.toggle('tree-view.showOnRightSide')
+    atom.config.toggle('ftp-tree-view.showOnRightSide')
 
   onSideToggled: (newValue) ->
     @detach()

@@ -3,10 +3,10 @@ path = require 'path'
 {Model} = require 'theorist'
 _ = require 'underscore-plus'
 
-File = require './file'
+FTPFile = require './ftp-file'
 
 module.exports =
-class Directory extends Model
+class FTPDirectory extends Model
   @properties
     directory: null
     isRoot: false
