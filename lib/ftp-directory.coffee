@@ -11,47 +11,19 @@ class FTPDirectory extends Model
     directory: null
     isRoot: false
     isExpanded: false
-    status: null # Either null, 'added', 'ignored', or 'modified'
     entries: -> {}
     expandedEntries: -> {}
 
   @::accessor 'name', -> @directory.getBaseName()
   @::accessor 'path', -> @directory.getPath()
-  @::accessor 'submodule', -> atom.project.getRepo()?.isSubmodule(@path)
-  @::accessor 'symlink', -> @directory.symlink
 
   constructor: ->
     super
-    repo = atom.project.getRepo()
-    if repo?
-      @subscribeToRepo(repo)
-      @updateStatus(repo)
 
-  # Called by theorist.
   destroyed: ->
     @unwatch()
     @unsubscribe()
 
-  # Subscribe to the given repo for changes to the Git status of this directory.
-  subscribeToRepo: (repo) ->
-    @subscribe repo, 'status-changed', (changedPath, status) =>
-      @updateStatus(repo) if changedPath.indexOf("#{@path}#{path.sep}") is 0
-    @subscribe repo, 'statuses-changed', =>
-      @updateStatus(repo)
-
-  # Update the status property of this directory using the repo.
-  updateStatus: (repo) ->
-    newStatus = null
-    if repo.isPathIgnored(@path)
-      newStatus = 'ignored'
-    else
-      status = repo.getDirectoryStatus(@path)
-      if repo.isStatusModified(status)
-        newStatus = 'modified'
-      else if repo.isStatusNew(status)
-        newStatus = 'added'
-
-    @status = newStatus if newStatus isnt @status
 
   # Is the given path ignored?
   isPathIgnored: (filePath) ->
