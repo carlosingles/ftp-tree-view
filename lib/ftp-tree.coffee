@@ -5,6 +5,8 @@ module.exports =
     hideVcsIgnoredFiles: false
     hideIgnoredNames: false
     showOnRightSide: true
+    localPathForProjects: "/Users/Atom Projects/"
+    serverList: "/Users/Atom Projects/serverList.json"
 
   treeView: null
 

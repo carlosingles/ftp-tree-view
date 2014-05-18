@@ -25,15 +25,19 @@ class FTPTreeView extends ScrollView
   @content: ->
     @div class: 'tree-view-resizer tool-panel', 'data-show-on-right-side': atom.config.get('ftp-tree-view.showOnRightSide'), =>
       @div class: 'tree-view-scroller', outlet: 'scroller', =>
-        @div class: 'ftp-tree-view connection-panel', =>
-          @div class: 'block', =>
-            @subview 'hostEditor', new EditorView(mini: true)
-          @div class: 'block', =>
-            @subview 'usernameEditor', new EditorView(mini: true)
-          @div class: 'block', =>
-            @subview 'passwordEditor', new EditorView(mini: true)
-          @button click: 'connectToFTPServer', 'Connect'
-        @ol class: 'tree-view full-menu list-tree has-collapsable-children focusable-panel', tabindex: -1, outlet: 'list'
+        @button class: 'btn-tab active icon icon-gear', click: 'changeTab1', outlet: 'tabButton1', 'Configuration'
+        @button class: 'btn-tab icon icon-x', click: 'changeTab2', outlet: 'tabButton2', 'No Connection'
+        @div class: 'ftp-tree-view tab', outlet: 'tab1', =>
+          @div class: 'ftp-tree-view connection-panel', =>
+            @div class: 'block', =>
+              @subview 'hostEditor', new EditorView(mini: true)
+            @div class: 'block', =>
+              @subview 'usernameEditor', new EditorView(mini: true)
+            @div class: 'block', =>
+              @subview 'passwordEditor', new EditorView(mini: true)
+            @button class: 'inline-block btn', click: 'connectToFTPServer', 'Connect'
+        @div class: 'ftp-tree-view tab', style: 'display:none;', outlet: 'tab2',  =>
+          @ol class: 'tree-view full-menu list-tree has-collapsable-children focusable-panel', tabindex: -1, outlet: 'list'
       @div class: 'tree-view-resize-handle', outlet: 'resizeHandle'
 
   initialize: (state) ->
@@ -115,6 +119,18 @@ class FTPTreeView extends ScrollView
     @width(state.width) if state.width > 0
     @attach() if state.attached
 
+  changeTab1: ->
+      @tab1.show()
+      @tabButton1.addClass("active")
+      @tab2.hide()
+      @tabButton2.removeClass("active")
+
+  changeTab2: ->
+      @tab2.show()
+      @tabButton2.addClass("active")
+      @tab1.hide()
+      @tabButton1.removeClass("active")
+
   connectToFTPServer: ->
     @client = new Client() unless @client
     currentView = @
@@ -127,6 +143,7 @@ class FTPTreeView extends ScrollView
         indexDirectory.parseRawList()
         root = new FTPDirectoryView(indexDirectory)
         currentView.list.append(root)
+        @changeTab2()
     @client.connect
       host: @hostEditor.getText()
       user: @usernameEditor.getText()

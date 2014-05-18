@@ -51,3 +51,26 @@
     position: absolute;
   }
 }
+
+.btn-tab{
+  border: 0;
+  padding: 7px 0;
+  width: 50%;
+  overflow:hidden;
+  text-overflow: ellipsis;
+  font-size: 0.9em;
+  background: @tab-background-color;
+  color: @text-color;
+  &.active{
+    background: @tab-background-color-active;
+    color: @text-color-selected;
+  }
+  &.icon{
+
+  }
+  &.icon:before{
+    margin-right: 5px;
+    position:relative;
+    top: 1px;
+  }
+}
