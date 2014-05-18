@@ -4,33 +4,46 @@ path = require 'path'
 _ = require 'underscore-plus'
 
 FTPFile = require './ftp-file'
+Client = require('ftp')
 
 module.exports =
 class FTPDirectory extends Model
   @properties
-    directory: null
+    path: null
+    name: null
     isRoot: false
     isExpanded: false
-    entries: -> {}
+    client: null
+    rawlist: -> {}
+    entries: false
     expandedEntries: -> {}
-
-  @::accessor 'name', -> @directory.getBaseName()
-  @::accessor 'path', -> @directory.getPath()
 
   constructor: ->
     super
 
   destroyed: ->
-    @unwatch()
-    @unsubscribe()
 
+  loadDirectory: ->
+    directory = @
+    @client.list path.join(@path, @name), (err, list) ->
+      throw err if err
+      directory.rawlist = list
+      directory.parseRawList()
+
+  parseRawList: ->
+    parsedEntries = []
+    for item in @rawlist
+      unless @isPathIgnored(item.path) or item.name is '.' or item.name is '..'
+        if item.type is 'd'
+          entry = new FTPDirectory({client: @client, name: item.name, isRoot: false, path: path.join(@path, @name), isExpanded: false})
+        else
+          entry = new FTPFile(path.join @path, @name, item.name)
+        parsedEntries.push entry
+    @entries = parsedEntries
+    @emit 'directory-loaded', parsedEntries
 
   # Is the given path ignored?
   isPathIgnored: (filePath) ->
-    if atom.config.get('tree-view.hideVcsIgnoredFiles')
-      repo = atom.project.getRepo()
-      return true if repo? and repo.isProjectAtRoot() and repo.isPathIgnored(filePath)
-
     if atom.config.get('tree-view.hideIgnoredNames')
       ignoredNames = atom.config.get('core.ignoredNames') ? []
       ignoredNames = [ignoredNames] if typeof ignoredNames is 'string'
@@ -43,14 +56,6 @@ class FTPDirectory extends Model
 
   # Create a new model for the given atom.File or atom.Directory entry.
   createEntry: (entry, index) ->
-    if entry.getEntriesSync?
-      expandedEntries = @expandedEntries[entry.getBaseName()]
-      isExpanded = expandedEntries?
-      entry = new Directory({directory: entry, isExpanded, expandedEntries})
-    else
-      entry = new File(file: entry)
-    entry.indexInParentDirectory = index
-    entry
 
   # Public: Does this directory contain the given path?
   #
@@ -58,62 +63,21 @@ class FTPDirectory extends Model
   contains: (pathToCheck) ->
     @directory.contains(pathToCheck)
 
-  # Public: Stop watching this directory for changes.
-  unwatch: ->
-    if @watchSubscription?
-      @watchSubscription.off()
-      @watchSubscription = null
-      if @isAlive()
-        for key, entry of @entries
-          entry.destroy()
-          delete @entries[key]
-
-  # Public: Watch this directory for changes.
-  #
-  # The changes will be emitted as 'entry-added' and 'entry-removed' events.
-  watch: ->
-    unless @watchSubscription?
-      @watchSubscription = @directory.on 'contents-changed', => @reload()
-      @subscribe(@watchSubscription)
-
   # Public: Perform a synchronous reload of the directory.
   reload: ->
-    newEntries = []
-    removedEntries = _.clone(@entries)
-    index = 0
-
-    for entry in @directory.getEntriesSync()
-      name = entry.getBaseName()
-      if @entries.hasOwnProperty(name)
-        delete removedEntries[name]
-        index++
-      else if not @isPathIgnored(entry.path)
-        newEntries.push([entry, index])
-        index++
-
-    for name, entry of removedEntries
-      entry.destroy()
-      delete @entries[name]
-      delete @expandedEntries[name]
-      @emit 'entry-removed', entry
-
-    for [entry, index] in newEntries
-      entry = @createEntry(entry, index)
-      @entries[entry.name] = entry
-      @emit 'entry-added', entry
 
   # Public: Collapse this directory and stop watching it.
   collapse: ->
     @isExpanded = false
     @expandedEntries = @serializeExpansionStates()
-    @unwatch()
 
   # Public: Expand this directory, load its children, and start watching it for
   # changes.
   expand: ->
-    @isExpanded = true
-    @reload()
-    @watch()
+    if @entries
+      @isExpanded = true
+    else
+      @loadDirectory()
 
   serializeExpansionStates: ->
     expandedEntries = {}

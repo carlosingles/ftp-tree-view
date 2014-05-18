@@ -6,8 +6,8 @@ module.exports =
 class FTPFile extends Model
   @properties
     file: null
-
-  @::accessor 'name', -> @path.basename()
+    path: null
+  @::accessor 'name', -> path.basename(@path)
   @::accessor 'type', ->
     extension = path.extname(@path)
     if fs.isReadmePath(@path)
@@ -26,7 +26,3 @@ class FTPFile extends Model
   constructor: (path) ->
     super
     @path = path
-
-  # Called by theorist.
-  destroyed: ->
-    @unsubscribe()

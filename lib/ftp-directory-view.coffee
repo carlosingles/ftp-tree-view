@@ -1,7 +1,8 @@
 {$, View} = require 'atom'
 
-FileView = require './file-view'
-File = require './file'
+FTPFileView = require './ftp-file-view'
+FTPFile = require './ftp-file'
+FTPDirectory = require './ftp-directory'
 
 module.exports =
 class FTPDirectoryView extends View
@@ -11,62 +12,52 @@ class FTPDirectoryView extends View
         @span class: 'name icon', outlet: 'directoryName'
       @ol class: 'entries list-tree', outlet: 'entries'
 
-  initialize: (@name, @list) ->
+  initialize: (@directory) ->
     iconClass = 'icon-file-directory'
+    if @directory.isRoot
+      iconClass = 'icon-repo' if atom.project.getRepo()?.isProjectAtRoot()
+    else
+      iconClass = 'icon-file-submodule' if @directory.submodule
     @directoryName.addClass(iconClass)
-    @directoryName.text(@name)
-    @directoryName.attr('data-name', @name)
-    @expand()
+    @directoryName.text(@directory.name)
+    @directoryName.attr('data-name', @directory.name)
+    @directoryName.attr('data-path', @directory.path)
+    directoryView = @
+    @subscribe @directory, 'directory-loaded', (entries) =>
+      for entry in entries
+        view = directoryView.createViewForEntry(entry)
+        directoryView.entries.append(view)
+    if @directory.entries
+      for entry in @directory.entries
+        view = @createViewForEntry(entry)
+        @entries.append(view)
+    @expand() if @directory.isExpanded
 
   beforeRemove: ->
-    @name.destroy()
-    @list.destroy()
+    @directory.destroy()
 
-  # subscribeToDirectory: ->
-  #   @subscribe @directory, 'entry-added', (entry) =>
-  #     view = @createViewForEntry(entry)
-  #     insertionIndex = entry.indexInParentDirectory
-  #     if insertionIndex < @entries.children().length
-  #       @entries.children().eq(insertionIndex).before(view)
-  #     else
-  #       @entries.append(view)
-  #
-  #   @subscribe @directory, 'entry-added entry-removed', =>
-  #     @trigger 'tree-view:directory-modified' if @isExpanded
-  #
-  # getPath: ->
-  #   @directory.path
+  getPath: ->
+    @directory.path
 
-  # createViewForEntry: (entry) ->
-  #   if entry instanceof Directory
-  #     view = new DirectoryView(entry)
-  #   else
-  #     view = new FileView(entry)
-  #
-  #   subscription = @subscribe @directory, 'entry-removed', (removedEntry) ->
-  #     if entry is removedEntry
-  #       view.remove()
-  #       subscription.off()
-  #
-  #   view
+  createViewForEntry: (entry) ->
+    if entry instanceof FTPDirectory
+      view = new FTPDirectoryView(entry)
+    else
+      view = new FTPFileView(entry)
 
-  # reload: ->
-  #   @directory.reload() if @isExpanded
+  reload: ->
+    @directory.reload() if @isExpanded
 
   toggleExpansion: ->
-    if @isExpanded then @collapse() else @expand()
+    if @directory.isExpanded then @collapse() else @expand()
 
   expand: ->
     return if @isExpanded
     @addClass('expanded').removeClass('collapsed')
-    # @subscribeToDirectory()
-    # @directory.expand()
-    @isExpanded = true
+    @directory.expand()
     false
 
   collapse: ->
     @removeClass('expanded').addClass('collapsed')
-    # @directory.collapse()
-    # @unsubscribe(@directory)
-    @entries.empty()
+    @directory.collapse()
     @isExpanded = false

@@ -10,17 +10,18 @@ AddDialog = null  # Defer requiring until actually needed
 MoveDialog = null # Defer requiring until actually needed
 CopyDialog = null # Defer requiring until actually needed
 
-Directory = require './directory'
-DirectoryView = require './directory-view'
+FTPDirectory = require './ftp-directory'
 FTPDirectoryView = require './ftp-directory-view'
-File = require './file'
-FileView = require './file-view'
+FTPFile = require './ftp-file'
+FTPFileView = require './ftp-file-view'
 LocalStorage = window.localStorage
 
 Client = require('ftp')
 
 module.exports =
 class FTPTreeView extends ScrollView
+  client: null
+
   @content: ->
     @div class: 'tree-view-resizer tool-panel', 'data-show-on-right-side': atom.config.get('ftp-tree-view.showOnRightSide'), =>
       @div class: 'tree-view-scroller', outlet: 'scroller', =>
@@ -37,7 +38,6 @@ class FTPTreeView extends ScrollView
 
   initialize: (state) ->
     super
-
     focusAfterAttach = false
     root = null
     scrollLeftAfterAttach = -1
@@ -96,9 +96,6 @@ class FTPTreeView extends ScrollView
       else
         @selectActiveFile()
 
-    @subscribe atom.workspaceView, 'pane-container:active-pane-item-changed', =>
-      @selectActiveFile()
-    @subscribe atom.project, 'path-changed', => @updateRoot()
     @subscribe atom.config.observe 'ftp-tree-view.hideVcsIgnoredFiles', callNow: false, =>
       @updateRoot()
     @subscribe atom.config.observe 'ftp-tree-view.hideIgnoredNames', callNow: false, =>
@@ -119,20 +116,24 @@ class FTPTreeView extends ScrollView
     @attach() if state.attached
 
   connectToFTPServer: ->
-    client = new Client()
+    @client = new Client() unless @client
     currentView = @
-    client.on 'ready', ->
+    @client.on 'ready', ->
       console.log 'Connected'
-      client.list (err, list) ->
+      currentView.client.list (err, list) ->
         throw err if err
         hostname = currentView.hostEditor.getText()
-        root = new FTPDirectoryView(hostname, list)
+        indexDirectory = new FTPDirectory({client: currentView.client, name: "/", isRoot: true, path: "", isExpanded: true, rawlist: list})
+        indexDirectory.parseRawList()
+        root = new FTPDirectoryView(indexDirectory)
         currentView.list.append(root)
-        client.end()
-    client.connect
+    @client.connect
       host: @hostEditor.getText()
       user: @usernameEditor.getText()
       password: @passwordEditor.getText()
+
+  disconnectFromServer: ->
+    true
 
   afterAttach: (onDom) ->
     @focus() if @focusAfterAttach
@@ -203,8 +204,8 @@ class FTPTreeView extends ScrollView
     switch e.originalEvent?.detail ? 1
       when 1
         @selectEntry(entry)
-        @openSelectedEntry(false) if entry instanceof FileView
-        entry.toggleExpansion() if entry instanceof DirectoryView
+        @openSelectedEntry(false) if entry instanceof FTPFileView
+        entry.toggleExpansion() if entry instanceof FTPDirectoryView
       when 2
         if entry.is('.selected.file')
           atom.workspaceView.getActiveView()?.focus()
@@ -235,11 +236,18 @@ class FTPTreeView extends ScrollView
   updateRoot: (expandedEntries={}) ->
     @root?.remove()
 
+    # @client.list (err, list) ->
+    #   throw err if err
+    #   hostname = currentView.hostEditor.getText()
+    #   root = new FTPDirectoryView(hostname, list)
+    #   currentView.list.append(root)
+    #   @client.end()
+
     if rootDirectory = atom.project.getRootDirectory()
       ## always return blank directory
       @root = null
-      # directory = new Directory({directory: rootDirectory, isExpanded: true, expandedEntries, isRoot: true})
-      # @root = new DirectoryView(directory)
+      # directory = new FTPDirectory({directory: rootDirectory, isExpanded: true, expandedEntries, isRoot: true})
+      # @root = new FTPDirectoryView(directory)
       # @list.append(@root)
     else
       @root = null
@@ -322,7 +330,7 @@ class FTPTreeView extends ScrollView
 
   expandDirectory: ->
     selectedEntry = @selectedEntry()
-    selectedEntry.view().expand() if selectedEntry instanceof DirectoryView
+    selectedEntry.view().expand() if selectedEntry instanceof FTPDirectoryView
 
   collapseDirectory: ->
     if directory = @selectedEntry()?.closest('.expanded.directory').view()
@@ -334,10 +342,18 @@ class FTPTreeView extends ScrollView
 
   openSelectedEntry: (changeFocus) ->
     selectedEntry = @selectedEntry()
-    if selectedEntry instanceof DirectoryView
+    if selectedEntry instanceof FTPDirectoryView
       selectedEntry.view().toggleExpansion()
-    else if selectedEntry instanceof FileView
-      atom.workspaceView.open(selectedEntry.getPath(), { changeFocus })
+    else if selectedEntry instanceof FTPFileView
+      # atom.workspaceView.open(selectedEntry.getPath(), { changeFocus })
+      client = @client
+      client.get selectedEntry.getPath(), (err, stream) =>
+        throw err if err
+        filePath = "/Users/"+selectedEntry.getPath()
+        writeStream = fs.createWriteStream(filePath)
+        stream.pipe writeStream
+        stream.on 'end', =>
+          atom.workspaceView.open filePath, {changeFocus}
 
   showSelectedEntryInFileManager: ->
     entry = @selectedEntry()
