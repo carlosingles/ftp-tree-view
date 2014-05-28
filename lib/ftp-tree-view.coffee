@@ -14,6 +14,7 @@ FTPDirectory = require './ftp-directory'
 FTPDirectoryView = require './ftp-directory-view'
 FTPFile = require './ftp-file'
 FTPFileView = require './ftp-file-view'
+FTPConfigurationView = require './ftp-configuration-view'
 LocalStorage = window.localStorage
 
 Client = require('ftp')
@@ -24,21 +25,54 @@ class FTPTreeView extends ScrollView
 
   @content: ->
     @div class: 'tree-view-resizer tool-panel', 'data-show-on-right-side': atom.config.get('ftp-tree-view.showOnRightSide'), =>
-      @div class: 'tree-view-scroller', outlet: 'scroller', =>
-        @button class: 'btn-tab active icon icon-gear', click: 'changeTab1', outlet: 'tabButton1', 'Configuration'
-        @button class: 'btn-tab icon icon-x', click: 'changeTab2', outlet: 'tabButton2', 'No Connection'
-        @div class: 'ftp-tree-view tab', outlet: 'tab1', =>
-          @div class: 'ftp-tree-view connection-panel', =>
-            @div class: 'block', =>
-              @subview 'hostEditor', new EditorView(mini: true)
-            @div class: 'block', =>
-              @subview 'usernameEditor', new EditorView(mini: true)
-            @div class: 'block', =>
-              @subview 'passwordEditor', new EditorView(mini: true)
-            @button class: 'inline-block btn', click: 'connectToFTPServer', 'Connect'
-        @div class: 'ftp-tree-view tab', style: 'display:none;', outlet: 'tab2',  =>
+      @div class: 'tree-view-scroller', outlet: 'scroller', style: 'padding-bottom: 26px;', =>
+        # Tabs
+        @button class: 'btn-tab active icon icon-gear', click: 'changeToConfigruationTab', outlet: 'configurationTabButton', 'Configuration'
+        @button class: 'btn-tab icon icon-x', click: 'changeToConnectionTab', outlet: 'connectionTabButton', 'No Connection'
+        # Configuration Tab
+        @div class: 'ftp-tree-view tab', outlet: 'configurationTab', =>
+          @div class: 'connection-panel panel', =>
+            # Saved Connections
+            @div class: 'panel-heading', click: 'toggleServerList', =>
+              @span class: 'icon icon-chevron-down', outlet: 'serverListToggle', 'Saved Connections'
+            @div class: 'panel-body padded', outlet: 'serverListPanel', =>
+              @subview 'savedConnections', new FTPConfigurationView()
+            # Add Connection
+            @div class: 'panel-heading', click: 'toggleAddConnection', =>
+              @span class: 'icon icon-chevron-down', outlet: 'addConnectionToggle', 'Add Connection'
+            @div class: 'panel-body padded', outlet: 'addConnectionPanel', =>
+              @div class: 'block', =>
+                @label 'Connection Name'
+                @subview 'nameEditor', new EditorView(mini: true)
+              @div class: 'block', =>
+                @label 'Server'
+                @subview 'hostEditor', new EditorView(mini: true)
+              @div class: 'block', =>
+                @label 'Username'
+                @subview 'usernameEditor', new EditorView(mini: true)
+              @div class: 'block', =>
+                @label 'Password'
+                @subview 'passwordEditor', new EditorView(mini: true)
+              @div class: 'block', =>
+                @label 'Port'
+                @subview 'portEditor', new EditorView(mini: true)
+              @div class: 'block', =>
+                @label 'Local Path'
+                @subview 'localDirEditor', new EditorView(mini: true)
+              @div class: 'block', =>
+                @label 'Remote Path'
+                @subview 'remoteDirEditor', new EditorView(mini: true)
+              @button class: 'inline-block btn', click: 'addToServerList', 'Add'
+              @button class: 'inline-block btn', click: 'openConfig', 'Open Config'
+        # Connection Tab
+        @div class: 'ftp-tree-view tab', style: 'display:none;', outlet: 'connectionTab',  =>
           @ol class: 'tree-view full-menu list-tree has-collapsable-children focusable-panel', tabindex: -1, outlet: 'list'
+      @div class: 'status-bar tool-panel panel-bottom', style: 'top: -26px', =>
+        @div class: 'flexbox-repaint-hack', =>
+          @div class: 'status-bar-left', =>
+            @span class: 'message', outlet: 'currentStatus', 'No connection'
       @div class: 'tree-view-resize-handle', outlet: 'resizeHandle'
+
 
   initialize: (state) ->
     super
@@ -48,9 +82,12 @@ class FTPTreeView extends ScrollView
     scrollTopAfterAttach = -1
     selectedPath = null
 
-    @hostEditor.setPlaceholderText('host')
-    @usernameEditor.setPlaceholderText('username')
-    @passwordEditor.setPlaceholderText('password')
+    @portEditor.setPlaceholderText('21')
+    @localDirEditor.setPlaceholderText(atom.getConfigDirPath() + '/tmp/')
+    @remoteDirEditor.setPlaceholderText('/')
+
+    @on 'click', '.server-entry', (e) => @serverClicked(e)
+    @on 'dblclick', '.server-entry', (e) => @connectToServer(e)
 
     @on 'dblclick', '.tree-view-resize-handle', => @resizeToFitContent()
     @on 'click', '.entry', (e) =>
@@ -119,35 +156,81 @@ class FTPTreeView extends ScrollView
     @width(state.width) if state.width > 0
     @attach() if state.attached
 
-  changeTab1: ->
-      @tab1.show()
-      @tabButton1.addClass("active")
-      @tab2.hide()
-      @tabButton2.removeClass("active")
+  changeToConfigruationTab: ->
+      @configurationTab.show()
+      @configurationTabButton.addClass('active')
+      @connectionTab.hide()
+      @connectionTabButton.removeClass('active')
 
-  changeTab2: ->
-      @tab2.show()
-      @tabButton2.addClass("active")
-      @tab1.hide()
-      @tabButton1.removeClass("active")
+  changeToConnectionTab: ->
+      @connectionTab.show()
+      @connectionTabButton.addClass('active')
+      @configurationTab.hide()
+      @configurationTabButton.removeClass('active')
 
-  connectToFTPServer: ->
+  toggleServerList: ->
+    @serverListToggle.toggleClass('icon-chevron-right').toggleClass('icon-chevron-down')
+    @serverListPanel.toggle()
+
+  toggleAddConnection: ->
+    @addConnectionToggle.toggleClass('icon-chevron-right').toggleClass('icon-chevron-down')
+    @addConnectionPanel.toggle()
+
+  serverClicked: (e) ->
+    entry = $(e.currentTarget).view()
+    $('.server-entry').removeClass('selected')
+    entry.addClass('selected')
+
+  connectToServer: (e) ->
+    @currentStatus.text('Connecting...')
+    entry = $(e.currentTarget).view()
+    entry.children('.icon.name').removeClass('icon-server').addClass('icon-clock')
     @client = new Client() unless @client
     currentView = @
     @client.on 'ready', ->
-      console.log 'Connected'
+      currentView.currentStatus.text('Connected - Listing index...')
       currentView.client.list (err, list) ->
+        entry.children('.icon.name').removeClass('icon-clock').addClass('icon-server')
         throw err if err
-        hostname = currentView.hostEditor.getText()
         indexDirectory = new FTPDirectory({client: currentView.client, name: "/", isRoot: true, path: "", isExpanded: true, rawlist: list})
         indexDirectory.parseRawList()
         root = new FTPDirectoryView(indexDirectory)
         currentView.list.append(root)
-        @changeTab2()
+        currentView.changeToConnectionTab()
+        currentView.connectionTabButton.removeClass('icon-x').addClass('icon-zap').text('Connected')
+        currentView.currentStatus.text('Connected - ' + entry.server.host)
+        entry.children('.icon.name').removeClass('icon-server').addClass('icon-zap')
     @client.connect
+      host: entry.server.host
+      user: entry.server.username
+      password: entry.server.password
+      port: entry.server.port
+
+  addToServerList: ->
+    serverConfig =
+      name: @nameEditor.getText()
       host: @hostEditor.getText()
-      user: @usernameEditor.getText()
+      username: @usernameEditor.getText()
       password: @passwordEditor.getText()
+      port: @portEditor.getText()
+      localPath: @localDirEditor.getText()
+      remotePath: @remoteDirEditor.getText()
+    ftpConfigPath = atom.getConfigDirPath() + '/packages/ftp-tree-view/ftp-tree-view-config.json'
+    fs.open ftpConfigPath, 'a+', (err, fd) ->
+      throw err if err
+      fs.readFile ftpConfigPath, 'utf8', (err, data) ->
+        throw err if err
+        if data
+          currentConfig = JSON.parse(data)
+        currentConfig = {servers: []} unless currentConfig
+        currentConfig.servers.push(serverConfig)
+        fs.writeFile ftpConfigPath, JSON.stringify(currentConfig, undefined, 2), (err) ->
+          throw err if err
+          console.log 'Configuration saved.'
+
+  openConfig: ->
+    ftpConfigPath = atom.getConfigDirPath() + '/packages/ftp-tree-view/ftp-tree-view-config.json'
+    atom.workspaceView.open ftpConfigPath, {changeFocus: true}
 
   disconnectFromServer: ->
     true
@@ -362,13 +445,17 @@ class FTPTreeView extends ScrollView
     if selectedEntry instanceof FTPDirectoryView
       selectedEntry.view().toggleExpansion()
     else if selectedEntry instanceof FTPFileView
-      # atom.workspaceView.open(selectedEntry.getPath(), { changeFocus })
-      client = @client
-      client.get selectedEntry.getPath(), (err, stream) =>
+      ftpTempStoragePath = atom.getConfigDirPath() + '/tmp/ftp-tree-view/'
+      @client.get selectedEntry.getPath(), (err, stream) =>
         throw err if err
-        filePath = "/Users/"+selectedEntry.getPath()
+        # set filepath for file
+        filePath = ftpTempStoragePath + selectedEntry.getPath()
+        # create folders if missing
+        fs.makeTreeSync path.dirname(filePath)
+        # write file to folder
         writeStream = fs.createWriteStream(filePath)
         stream.pipe writeStream
+        # once file is written, open file
         stream.on 'end', =>
           atom.workspaceView.open filePath, {changeFocus}
 
