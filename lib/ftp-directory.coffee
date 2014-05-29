@@ -14,6 +14,7 @@ class FTPDirectory extends Model
     isRoot: false
     isExpanded: false
     client: null
+    raw: null
     rawlist: -> {}
     entries: false
     expandedEntries: -> {}
@@ -22,6 +23,22 @@ class FTPDirectory extends Model
     super
 
   destroyed: ->
+
+  getStringDetails: ->
+    return new Date(@raw.time).toLocaleString() + ' | ' + @getOctalPermissions()
+
+  getOctalPermissions: ->
+    user  = @permissionObjectToDigit(@raw.userPermissions)
+    group = @permissionObjectToDigit(@raw.groupPermissions)
+    other = @permissionObjectToDigit(@raw.otherPermissions)
+    return '0' + user + group + other
+
+  permissionObjectToDigit: (p) ->
+    value = 0
+    value += 1 if p.exec is true
+    value += 2 if p.write is true
+    value += 4 if p.read is true
+    return value
 
   loadDirectory: ->
     directory = @
@@ -35,9 +52,9 @@ class FTPDirectory extends Model
     for item in @rawlist
       unless @isPathIgnored(item.path) or item.name is '.' or item.name is '..'
         if item.type is 1
-          entry = new FTPDirectory({client: @client, name: item.name, isRoot: false, path: path.join(@path, @name), isExpanded: false})
+          entry = new FTPDirectory({client: @client, name: item.name, isRoot: false, path: path.join(@path, @name), isExpanded: false, raw: item})
         else
-          entry = new FTPFile(path.join @path, @name, item.name)
+          entry = new FTPFile(path.join(@path, @name, item.name), item)
         parsedEntries.push entry
     @entries = parsedEntries
     @emit 'directory-loaded', parsedEntries
