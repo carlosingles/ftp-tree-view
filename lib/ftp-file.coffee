@@ -8,6 +8,7 @@ class FTPFile extends Model
     file: null
     path: null
   @::accessor 'name', -> path.basename(@path)
+  @::accessor 'directory', -> path.dirname(@path)
   @::accessor 'type', ->
     extension = path.extname(@path)
     if fs.isReadmePath(@path)

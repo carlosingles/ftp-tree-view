@@ -22,5 +22,11 @@ class FTPFileView extends View
   getPath: ->
     @file.path
 
+  getDirectory: ->
+    @file.directory
+
+  getName: ->
+    @file.name
+
   beforeRemove: ->
     @file.destroy()
