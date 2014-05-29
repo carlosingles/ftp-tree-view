@@ -9,11 +9,12 @@
 - [x] Separate connection and directory view tabs
 - [x] Save files to temporary directory
 - [x] Disconnect from server
+- [x] Clean up of temporary files
+- [x] Upload files from temporary directory on save
 
 ## Upcoming Features
 ###### In no particular order:
 - [ ] Contextual menus for actions
-- [ ] Clean up of temporary files
 - [ ] SFTP Support
 - [ ] Rename files
 - [ ] Delete files
@@ -21,7 +22,6 @@
 - [ ] Duplicate files
 - [ ] Create directories
 - [ ] chmod files
-- [ ] Upload files from temporary directory
 - [ ] Save files to specified local directory
 - [ ] Upload files from specified local directory
 - [ ] Local <---> Remote Sync
