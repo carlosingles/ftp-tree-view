@@ -285,7 +285,7 @@ class FTPTreeView extends ScrollView
     ftpConfigPath = atom.getConfigDirPath() + '/packages/ftp-tree-view/ftp-tree-view-config.json'
     atom.workspaceView.open ftpConfigPath, {changeFocus: true}
 
-  disconnectFromServer: (message='Disconnected') ->
+  disconnectFromServer: (message) ->
     @disconnectButton.addClass('hide')
     @currentStatus.text('Disconnecting...')
     if @client.authenticating or !@client.authenticated
@@ -295,6 +295,7 @@ class FTPTreeView extends ScrollView
       @client.raw.quit (err, data) ->
         throw err if err
         that.client = null
+    message = 'Disconnected' unless message instanceof String
     @currentStatus.text(message)
     @list.empty()
     @cancelClientLink.addClass('hide')
