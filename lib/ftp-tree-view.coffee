@@ -2,8 +2,10 @@ path = require 'path'
 shell = require 'shell'
 
 _ = require 'underscore-plus'
+{Emitter, Subscriber} = require 'emissary'
 {$, BufferedProcess, ScrollView, EditorView} = require 'atom'
 fs = require 'fs-plus'
+os = require 'os'
 
 Dialog = null     # Defer requiring until actually needed
 AddDialog = null  # Defer requiring until actually needed
@@ -485,18 +487,13 @@ class FTPTreeView extends ScrollView
     if selectedEntry instanceof FTPDirectoryView
       selectedEntry.view().toggleExpansion()
     else if selectedEntry instanceof FTPFileView
-      ftpTempStoragePath = atom.getConfigDirPath() + '/tmp/ftp-tree-view/'
-      @client.get selectedEntry.getPath(), (err, stream) =>
-        throw err if err
-        # set filepath for file
-        filePath = ftpTempStoragePath + selectedEntry.getPath()
-        # create folders if missing
-        fs.makeTreeSync path.dirname(filePath)
-        # write file to folder
-        writeStream = fs.createWriteStream(filePath)
-        stream.pipe writeStream
-        # once file is written, open file
-        stream.on 'end', =>
+      ftpTempStoragePath = os.tmpdir() + @client.host + '/'
+      filePath = ftpTempStoragePath + selectedEntry.getPath()
+      fs.makeTreeSync path.dirname(filePath)
+      @client.get selectedEntry.getPath(), filePath, (hadErr) ->
+        if hadErr
+          console.error('There was an error retrieving the file.')
+        else
           atom.workspaceView.open filePath, {changeFocus}
 
   showSelectedEntryInFileManager: ->
