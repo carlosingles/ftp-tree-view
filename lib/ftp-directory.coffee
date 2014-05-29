@@ -25,7 +25,7 @@ class FTPDirectory extends Model
 
   loadDirectory: ->
     directory = @
-    @client.list path.join(@path, @name), (err, list) ->
+    @client.ls path.join(@path, @name), (err, list) ->
       throw err if err
       directory.rawlist = list
       directory.parseRawList()
@@ -34,7 +34,7 @@ class FTPDirectory extends Model
     parsedEntries = []
     for item in @rawlist
       unless @isPathIgnored(item.path) or item.name is '.' or item.name is '..'
-        if item.type is 'd'
+        if item.type is 1
           entry = new FTPDirectory({client: @client, name: item.name, isRoot: false, path: path.join(@path, @name), isExpanded: false})
         else
           entry = new FTPFile(path.join @path, @name, item.name)

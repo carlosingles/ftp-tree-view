@@ -17,7 +17,7 @@ FTPFileView = require './ftp-file-view'
 FTPConfigurationView = require './ftp-configuration-view'
 LocalStorage = window.localStorage
 
-Client = require('ftp')
+JSFtp = require('jsftp')
 
 module.exports =
 class FTPTreeView extends ScrollView
@@ -75,6 +75,7 @@ class FTPTreeView extends ScrollView
         @div class: 'flexbox-repaint-hack', =>
           @div class: 'status-bar-left', =>
             @span class: 'message', outlet: 'currentStatus', 'No connection'
+            @a class: 'pull-right hide', click: 'cancelClient', outlet: 'cancelClientLink', 'Cancel'
       @div class: 'tree-view-resize-handle', outlet: 'resizeHandle'
 
 
@@ -185,33 +186,53 @@ class FTPTreeView extends ScrollView
     $('.server-entry').removeClass('selected')
     entry.addClass('selected')
 
+  cancelClient: ->
+    if @client.authenticating
+      @disconnectFromServer('Connection cancelled')
+
   connectToServer: (e) ->
-    @currentStatus.text('Connecting...')
-    entry = $(e.currentTarget).view()
-    entry.children('.icon.name').removeClass('icon-server').addClass('icon-clock')
-    @client = new Client() unless @client
-    currentView = @
-    @client.on 'ready', ->
-      currentView.currentStatus.text('Connected - Listing index...')
-      currentView.client.list (err, list) ->
-        entry.children('.icon.name').removeClass('icon-clock').addClass('icon-server')
-        throw err if err
-        indexDirectory = new FTPDirectory({client: currentView.client, name: "/", isRoot: true, path: "", isExpanded: true, rawlist: list})
-        indexDirectory.parseRawList()
-        root = new FTPDirectoryView(indexDirectory)
-        currentView.disconnectButton.removeClass('hide')
-        currentView.list.append(root)
-        currentView.changeToConnectionTab()
-        currentView.connectionTabButton.removeClass('icon-x').addClass('icon-zap').text('Connected')
-        currentView.currentStatus.text('Connected - ' + entry.server.host)
+    unless @client
+      @cancelClientLink.removeClass('hide')
+      @currentStatus.text('Connecting...')
+      entry = $(e.currentTarget).view()
+      entry.children('.icon.name').removeClass('icon-server').addClass('icon-clock')
+      @client = new JSFtp
+        host: entry.server.host
+        port: entry.server.port
+        debugMode: false
+      @client.on 'jsftp_debug', (eventType, data) ->
+        console.log('DEBUG: ', eventType)
+        console.log(JSON.stringify(data, null, 2))
+      that = @
+      timeout = setTimeout ->
+          that.disconnectFromServer('Connection timed out')
+        , 10000
+      @client.auth entry.server.username, entry.server.password, (err, data) ->
+        clearTimeout(timeout)
+        if err
+          that.disconnectFromServer(err.message)
+          return
+        that.currentStatus.text('Connected - Listing index...')
+        that.client.ls ".", (err, list) ->
+          entry.children('.icon.name').removeClass('icon-clock').addClass('icon-server')
+          throw err if err
+          indexDirectory = new FTPDirectory({client: that.client, name: "/", isRoot: true, path: "", isExpanded: true, rawlist: list})
+          indexDirectory.parseRawList()
+          root = new FTPDirectoryView(indexDirectory)
+          that.disconnectButton.removeClass('hide')
+          that.list.append(root)
+          that.changeToConnectionTab()
+          that.cancelClientLink.addClass('hide')
+        that.connectionTabButton.removeClass('icon-x').addClass('icon-zap').text('Connected')
+        that.currentStatus.text('Connected - ' + entry.server.host)
         entry.children('.icon.name').removeClass('icon-server').addClass('icon-zap')
-    @client.connect
-      host: entry.server.host
-      user: entry.server.username
-      password: entry.server.password
-      port: entry.server.port
+    else if @client?
+      @currentStatus.text('There is already an active connection')
+    else
+      @currentStatus.text('There is already a connection being attempted')
 
   addToServerList: ->
+    that = @
     serverConfig =
       name: @nameEditor.getText()
       host: @hostEditor.getText()
@@ -231,21 +252,28 @@ class FTPTreeView extends ScrollView
         currentConfig.servers.push(serverConfig)
         fs.writeFile ftpConfigPath, JSON.stringify(currentConfig, undefined, 2), (err) ->
           throw err if err
-          @currentStatus.text('Server added')
+          that.currentStatus.text('Server added')
 
   openConfig: ->
     ftpConfigPath = atom.getConfigDirPath() + '/packages/ftp-tree-view/ftp-tree-view-config.json'
     atom.workspaceView.open ftpConfigPath, {changeFocus: true}
 
-  disconnectFromServer: ->
+  disconnectFromServer: (message='Disconnected') ->
     @disconnectButton.addClass('hide')
     @currentStatus.text('Disconnecting...')
-    if @client
-      @client.end()
-      @list.empty()
-      @connectionTabButton.removeClass('icon-zap').addClass('icon-x').text('No Connection')
-      @currentStatus.text('No connection')
-      $('.ftp-configuration-list .icon-zap').removeClass('icon-zap').addClass('icon-server')
+    if @client.authenticating or !@client.authenticated
+      @client = null
+    else
+      that = @
+      @client.raw.quit (err, data) ->
+        throw err if err
+        that.client = null
+    @currentStatus.text(message)
+    @list.empty()
+    @cancelClientLink.addClass('hide')
+    @connectionTabButton.removeClass('icon-zap').addClass('icon-x').text('No Connection')
+    $('.ftp-configuration-list .icon').removeClass('icon-zap icon-clock').addClass('icon-server')
+    @changeToConfigruationTab()
 
   afterAttach: (onDom) ->
     @focus() if @focusAfterAttach
