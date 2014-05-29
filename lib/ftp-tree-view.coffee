@@ -108,6 +108,7 @@ class FTPTreeView extends ScrollView
                 that.client.raw.dele safeGaurdPath, (err, res) ->
                   that.currentStatus.text('File uploaded successfully')
       @subscribe buffer, 'destroyed', =>
+        @unsubscribe(buffer)
         $.each @watchedFiles, (index, file) =>
           relativePath = buffer.getUri().replace('/private'+os.tmpdir() + @client.host,'')
           if file.getPath() is relativePath
@@ -372,11 +373,14 @@ class FTPTreeView extends ScrollView
     switch e.originalEvent?.detail ? 1
       when 1
         @selectEntry(entry)
-        @openSelectedEntry(false) if entry instanceof FTPFileView
-        entry.toggleExpansion() if entry instanceof FTPDirectoryView
+        if entry instanceof FTPDirectoryView
+          entry.toggleExpansion()
+          @currentStatus.text(entry.directory.getStringDetails())
+        else if entry instanceof FTPFileView
+          @currentStatus.text(entry.file.getStringDetails())
       when 2
         if entry.is('.selected.file')
-          atom.workspaceView.getActiveView()?.focus()
+          @openSelectedEntry(true)
         else if entry.is('.selected.directory')
           entry.toggleExpansion()
 
