@@ -8,11 +8,11 @@
 - [x] Tree View for FTP Server
 - [x] Separate connection and directory view tabs
 - [x] Save files to temporary directory
+- [x] Disconnect from server
 
 ## Upcoming Features
 ###### In no particular order:
 - [ ] Contextual menus for actions
-- [ ] Disconnect from server
 - [ ] Clean up of temporary files
 - [ ] SFTP Support
 - [ ] Rename files
