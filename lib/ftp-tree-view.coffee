@@ -24,6 +24,7 @@ JSFtp = require('jsftp')
 module.exports =
 class FTPTreeView extends ScrollView
   client: null
+  watchedFiles: []
 
   @content: ->
     @div class: 'tree-view-resizer tool-panel', 'data-show-on-right-side': atom.config.get('ftp-tree-view.showOnRightSide'), =>
@@ -89,8 +90,32 @@ class FTPTreeView extends ScrollView
     scrollTopAfterAttach = -1
     selectedPath = null
 
+    # watch all save events
+    that = @
+    atom.project.eachBuffer (buffer) =>
+      @subscribe buffer, 'saved', =>
+        $.each @watchedFiles, (index, file) =>
+          relativePath = buffer.getUri().replace('/private'+os.tmpdir() + @client.host,'')
+          if file.getPath() is relativePath
+            # safe guard original file
+            that.currentStatus.text('Protecting original file...')
+            safeGaurdPath = file.getDirectory() + 'safesave-' + file.getName()
+            that.client.rename file.getPath(), safeGaurdPath, (err, res) ->
+              throw err if err
+              that.currentStatus.text('Uploading new file...')
+              that.client.put buffer.getPath(), file.getPath(), (hadError) ->
+                that.currentStatus.text('Deleting original file...')
+                that.client.raw.dele safeGaurdPath, (err, res) ->
+                  that.currentStatus.text('File uploaded successfully')
+      @subscribe buffer, 'destroyed', =>
+        $.each @watchedFiles, (index, file) =>
+          relativePath = buffer.getUri().replace('/private'+os.tmpdir() + @client.host,'')
+          if file.getPath() is relativePath
+            @watchedFiles.splice(index, 1);
+
+
     @portEditor.setPlaceholderText('21')
-    @localDirEditor.setPlaceholderText(atom.getConfigDirPath() + '/tmp/')
+    @localDirEditor.setPlaceholderText('none')
     @remoteDirEditor.setPlaceholderText('/')
 
     @on 'click', '.server-entry', (e) => @serverClicked(e)
@@ -490,10 +515,14 @@ class FTPTreeView extends ScrollView
       ftpTempStoragePath = os.tmpdir() + @client.host + '/'
       filePath = ftpTempStoragePath + selectedEntry.getPath()
       fs.makeTreeSync path.dirname(filePath)
+      that = @
+      @currentStatus.text('Downloading file...')
       @client.get selectedEntry.getPath(), filePath, (hadErr) ->
         if hadErr
-          console.error('There was an error retrieving the file.')
+          console.log('There was an error retrieving the file.')
         else
+          that.watchedFiles.push(selectedEntry)
+          that.currentStatus.text('File opened successfully')
           atom.workspaceView.open filePath, {changeFocus}
 
   showSelectedEntryInFileManager: ->
