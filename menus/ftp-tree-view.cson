@@ -1,0 +1,33 @@
+'menu': [
+  {
+    'label': 'View'
+    'submenu': [
+      { 'label': 'Toggle FTP Tree View', 'command': 'ftp-tree-view:toggle' }
+    ]
+  }
+  {
+    'label': 'Packages'
+    'submenu': [
+      'label': 'FTP Tree View'
+      'submenu': [
+        { 'label': 'Toggle', 'command': 'ftp-tree-view:toggle' }
+        { 'label': 'Toggle View Side', 'command': 'ftp-tree-view:toggle-side' }
+      ]
+    ]
+  }
+]
+
+'context-menu':
+  '.ftp-tree-view.full-menu':
+    'Add File': 'ftp-tree-view:add-file'
+    'Add Folder': 'ftp-tree-view:add-folder'
+    'Rename': 'ftp-tree-view:rename'
+    'Duplicate': 'ftp-tree-view:duplicate'
+    'Move': 'ftp-tree-view:move'
+    'Delete': 'ftp-tree-view:remove'
+    'Copy Full Path': 'ftp-tree-view:copy-full-path'
+    'Change permissions': 'ftp-tree-view:change-permissions'
+
+  '.ftp-tree-view.multi-select':
+    'Delete': 'tree-view:remove'
+    'Move': 'ftp-tree-view:move'
