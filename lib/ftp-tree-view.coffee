@@ -11,6 +11,7 @@ Dialog = null     # Defer requiring until actually needed
 AddDialog = null  # Defer requiring until actually needed
 MoveDialog = null # Defer requiring until actually needed
 CopyDialog = null # Defer requiring until actually needed
+RenameDialog = null # Defer requiring until actually needed
 
 FTPDirectory = require './ftp-directory'
 FTPDirectoryView = require './ftp-directory-view'
@@ -33,7 +34,7 @@ class FTPTreeView extends ScrollView
         @button class: 'btn-tab active icon icon-gear', click: 'changeToConfigruationTab', outlet: 'configurationTabButton', 'Configuration'
         @button class: 'btn-tab icon icon-x', click: 'changeToConnectionTab', outlet: 'connectionTabButton', 'No Connection'
         # Configuration Tab
-        @div class: 'ftp-tree-view tab', outlet: 'configurationTab', =>
+        @div class: 'ftp-tree-view', outlet: 'configurationTab', =>
           @div class: 'connection-panel panel', =>
             # Saved Connections
             @div class: 'panel-heading', click: 'toggleServerList', =>
@@ -68,11 +69,11 @@ class FTPTreeView extends ScrollView
               @button class: 'inline-block btn btn-success', click: 'addToServerList', 'Add'
               @button class: 'inline-block btn btn-info', click: 'openConfig', 'Open Config'
         # Connection Tab
-        @div class: 'ftp-tree-view tab', style: 'display:none;', outlet: 'connectionTab',  =>
+        @div class: 'ftp-tree-view', style: 'display:none;', outlet: 'connectionTab',  =>
           @div class:'block', =>
             @button class:'btn btn-error hide full-width', click: 'disconnectFromServer', outlet: 'disconnectButton', =>
               @span class: 'icon icon-alignment-unalign', 'Disconnect'
-          @ol class: 'tree-view full-menu list-tree has-collapsable-children focusable-panel', tabindex: -1, outlet: 'list'
+          @ol class: 'ftp-tree-view full-menu list-tree has-collapsable-children focusable-panel', tabindex: -1, outlet: 'list'
       # Status bar
       @div class: 'status-bar tool-panel panel-bottom', style: 'top: -26px', =>
         @div class: 'flexbox-repaint-hack', =>
@@ -150,18 +151,18 @@ class FTPTreeView extends ScrollView
         @showFullMenu()
 
     @on 'mousedown', '.tree-view-resize-handle', (e) => @resizeStarted(e)
-    @command 'core:move-up', => @moveUp()
-    @command 'core:move-down', => @moveDown()
+    @command 'ftp-tree-view:add-file', => @add(true)
+    @command 'ftp-tree-view:add-folder', => @add(false)
+    @command 'ftp-tree-view:duplicate', => @copySelectedEntry()
+    @command 'ftp-tree-view:remove', => @removeSelectedEntries()
+    @command 'ftp-tree-view:rename', => @renameSelectedEntry()
+    @command 'ftp-tree-view:change-permissions', => @changePermissionsSelectedEntry()
     @command 'ftp-tree-view:expand-directory', => @expandDirectory()
     @command 'ftp-tree-view:collapse-directory', => @collapseDirectory()
     @command 'ftp-tree-view:open-selected-entry', => @openSelectedEntry(true)
     @command 'ftp-tree-view:move', => @moveSelectedEntry()
     @command 'ftp-tree-view:copy', => @copySelectedEntries()
-    @command 'ftp-tree-view:cut', => @cutSelectedEntries()
-    @command 'ftp-tree-view:paste', => @pasteEntries()
     @command 'ftp-tree-view:copy-full-path', => @copySelectedEntryPath(false)
-    @command 'ftp-tree-view:show-in-file-manager', => @showSelectedEntryInFileManager()
-    @command 'ftp-tree-view:copy-project-path', => @copySelectedEntryPath(true)
     @command 'tool-panel:unfocus', => @unfocus()
 
     @on 'ftp-tree-view:directory-modified', =>
@@ -511,6 +512,31 @@ class FTPTreeView extends ScrollView
 
   moveSelectedEntry: ->
     super
+
+  renameSelectedEntry : ->
+    selectedEntry = @selectedEntry() or @root
+    RenameDialog ?= require './rename-dialog'
+
+    if selectedEntry.directory?
+      selectedPath = selectedEntry.directory.path + '/' + selectedEntry.directory.name
+      isDirectory = true
+    else
+      selectedPath = selectedEntry.getPath()
+      isDirectory = false
+    that = @
+    dialog = new RenameDialog(selectedPath, isDirectory)
+    dialog.on 'rename-entry', (event, originalPath, newPath) =>
+      that.currentStatus.text('Renaming file...')
+      that.client.rename originalPath, newPath, (err, res) ->
+        throw err if err
+        selectedEntry.fileName.text(path.basename(newPath)) if !isDirectory
+        selectedEntry.directoryName.text(path.basename(newPath)) if isDirectory
+        that.currentStatus.text('Renamed file')
+    dialog.attach()
+
+  changePermissionsSelectedEntry: ->
+    selectedEntry = @selectedEntry()
+    console.log selectedEntry
 
   openSelectedEntry: (changeFocus) ->
     selectedEntry = @selectedEntry()

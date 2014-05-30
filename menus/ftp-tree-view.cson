@@ -18,15 +18,17 @@
 ]
 
 'context-menu':
-  '.ftp-tree-view.full-menu':
-    'Add File': 'ftp-tree-view:add-file'
-    'Add Folder': 'ftp-tree-view:add-folder'
+  '.ftp-tree-view.full-menu .entries':
     'Rename': 'ftp-tree-view:rename'
     'Duplicate': 'ftp-tree-view:duplicate'
     'Move': 'ftp-tree-view:move'
     'Delete': 'ftp-tree-view:remove'
     'Copy Full Path': 'ftp-tree-view:copy-full-path'
     'Change permissions': 'ftp-tree-view:change-permissions'
+
+  '.ftp-tree-view.full-menu':
+    'Add File': 'ftp-tree-view:add-file'
+    'Add Folder': 'ftp-tree-view:add-folder'
 
   '.ftp-tree-view.multi-select':
     'Delete': 'tree-view:remove'

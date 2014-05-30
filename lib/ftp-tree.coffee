@@ -25,6 +25,8 @@ module.exports =
     unless @treeView?
       FTPTreeView = require './ftp-tree-view'
       @treeView = new FTPTreeView(@state)
+      atom.workspaceView.command 'ftp-tree-view:toggle', => @treeView().toggle()
+      atom.workspaceView.command 'ftp-tree-view:toggle-side', => @treeView().toggleSide()
     @treeView
 
   shouldAttach: ->
